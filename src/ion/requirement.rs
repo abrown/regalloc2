@@ -115,7 +115,9 @@ impl<'a, F: Function> Env<'a, F> {
                     Requirement::FixedReg(preg)
                 }
             }
-            OperandConstraint::Reg | OperandConstraint::Reuse(_) => Requirement::Register,
+            OperandConstraint::Reg | OperandConstraint::Reuse(_) | OperandConstraint::Range(_) => {
+                Requirement::Register
+            }
             OperandConstraint::Stack => Requirement::Stack,
             OperandConstraint::Any => Requirement::Any,
         }

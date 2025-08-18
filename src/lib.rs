@@ -223,6 +223,15 @@ impl PRegSet {
         }
     }
 
+    /// Create a set with only `0..end` available in `class`.
+    pub const fn from_range(class: RegClass, end: usize) -> Self {
+        assert!(end.is_power_of_two());
+        let mut set = Self::empty();
+        let bits = end as u64 - 1;
+        set.bits[class as usize] = bits;
+        set
+    }
+
     /// Splits the given register index into parts to access the internal bit array.
     const fn split_index(reg: PReg) -> (usize, usize) {
         let index = reg.index();
@@ -532,6 +541,13 @@ pub enum OperandConstraint {
     Stack,
     /// Operand must be in a fixed register.
     FixedReg(PReg),
+    /// Operand must be in a specific range of registers.
+    ///
+    /// For now, we only support ranges like `0-n`, where `n` is a power of two up to 2^32. We
+    /// currently only have 4 bits to represent the range. (TODO: we could increase this by changing
+    /// the encoding in `Operand::new`; possibly even for arbitrary ranges with `1 <4 bit end> <3
+    /// bit start>`).
+    Range(usize),
     /// On defs only: reuse a use's register.
     Reuse(usize),
 }
@@ -544,6 +560,9 @@ impl core::fmt::Display for OperandConstraint {
             Self::Stack => write!(f, "stack"),
             Self::FixedReg(preg) => write!(f, "fixed({})", preg),
             Self::Reuse(idx) => write!(f, "reuse({})", idx),
+            Self::Range(log2) => {
+                write!(f, "range(0-{})", 1 << log2)
+            }
         }
     }
 }
@@ -645,6 +664,10 @@ impl Operand {
             OperandConstraint::Reuse(which) => {
                 debug_assert!(which <= 31);
                 0b0100000 | which as u32
+            }
+            OperandConstraint::Range(log2) => {
+                debug_assert!(log2 <= 0b1111);
+                0b0010000 | log2 as u32
             }
         };
         let class_field = vreg.class() as u8 as u32;

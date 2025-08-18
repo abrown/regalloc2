@@ -447,6 +447,22 @@ impl<'a, F: Function> Env<'a, F> {
                     false
                 }
             }
+            OperandConstraint::Range(log2) => {
+                if self.edits.is_stack(alloc) {
+                    return false;
+                }
+                if let Some(preg) = alloc.as_reg() {
+                    if !self.available_pregs[op.pos()].contains(preg) {
+                        trace!("The vreg in {preg}: {}", self.vreg_in_preg[preg.index()]);
+                        let end = 1 << log2;
+                        self.vreg_in_preg[preg.index()] == op.vreg() && preg.hw_enc() < end
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
             // It is possible for an operand to have a fixed register constraint to
             // a clobber.
             OperandConstraint::FixedReg(preg) => alloc.is_reg() && alloc.as_reg().unwrap() == preg,
@@ -510,6 +526,7 @@ impl<'a, F: Function> Env<'a, F> {
         &mut self,
         inst: Inst,
         op: Operand,
+        within: Option<PRegSet>,
     ) -> Result<Allocation, RegAllocError> {
         trace!("available regs: {}", self.available_pregs);
         trace!("Int LRU: {:?}", self.lrus[RegClass::Int]);
@@ -525,6 +542,11 @@ impl<'a, F: Function> Env<'a, F> {
                 self.available_pregs[OperandPos::Late] & self.available_pregs[OperandPos::Early]
             }
             _ => self.available_pregs[op.pos()],
+        };
+        let draw_from = if let Some(within) = within {
+            draw_from & within
+        } else {
+            draw_from
         };
         if draw_from.is_empty(op.class()) {
             trace!("No registers available for {op}");
@@ -569,8 +591,13 @@ impl<'a, F: Function> Env<'a, F> {
         op_idx: usize,
     ) -> Result<Allocation, RegAllocError> {
         let new_alloc = match op.constraint() {
-            OperandConstraint::Any => self.alloc_reg_for_operand(inst, op)?,
-            OperandConstraint::Reg => self.alloc_reg_for_operand(inst, op)?,
+            OperandConstraint::Any | OperandConstraint::Reg => {
+                self.alloc_reg_for_operand(inst, op, None)?
+            }
+            OperandConstraint::Range(log2) => {
+                let within = PRegSet::from_range(op.class(), 1 << log2);
+                self.alloc_reg_for_operand(inst, op, Some(within))?
+            }
             OperandConstraint::FixedReg(preg) => {
                 trace!("The fixed preg: {} for operand {}", preg, op);
 
@@ -580,7 +607,6 @@ impl<'a, F: Function> Env<'a, F> {
                 // This is handled elsewhere.
                 unreachable!();
             }
-
             OperandConstraint::Stack => {
                 panic!("Stack operand constraints not supported in fastalloc");
             }

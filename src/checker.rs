@@ -104,6 +104,7 @@ use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::default::Default;
 use core::hash::Hash;
+use core::ops::Range;
 use core::result::Result;
 use smallvec::{smallvec, SmallVec};
 
@@ -165,6 +166,12 @@ pub enum CheckerError {
     StackToStackMove {
         into: Allocation,
         from: Allocation,
+    },
+    AllocationIsNotInRange {
+        inst: Inst,
+        op: Operand,
+        alloc: Allocation,
+        range: Range<usize>,
     },
 }
 
@@ -667,6 +674,19 @@ impl CheckerState {
                         alloc,
                         expected_alloc: allocs[idx],
                     });
+                }
+            }
+            OperandConstraint::Range(log2) => {
+                if let Some(preg) = alloc.as_reg() {
+                    let end = 1 << log2;
+                    if preg.hw_enc() >= end {
+                        return Err(CheckerError::AllocationIsNotInRange {
+                            inst,
+                            op,
+                            alloc,
+                            range: (0..end),
+                        });
+                    }
                 }
             }
         }
