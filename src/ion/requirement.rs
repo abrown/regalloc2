@@ -63,6 +63,8 @@ pub enum Requirement {
     Register,
     Stack,
     Any,
+    // TODO: we probably need a `LimitedReg(usize)` here to propagate the
+    // allowed range.
 }
 impl Requirement {
     #[inline(always)]
