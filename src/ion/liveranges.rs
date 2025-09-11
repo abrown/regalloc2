@@ -810,7 +810,9 @@ impl<'a, F: Function> Env<'a, F> {
                                 first_reg_slot.get_or_insert(u.slot);
                                 first_stack_slot.get_or_insert(u.slot);
                             }
-                            OperandConstraint::Reg | OperandConstraint::Reuse(_) => {
+                            OperandConstraint::Reg
+                            | OperandConstraint::Reuse(_)
+                            | OperandConstraint::Range(_) => {
                                 first_reg_slot.get_or_insert(u.slot);
                                 requires_reg = true;
                             }
@@ -823,9 +825,6 @@ impl<'a, F: Function> Env<'a, F> {
                                     num_fixed_reg += 1;
                                     first_reg_slot.get_or_insert(u.slot);
                                 }
-                            }
-                            OperandConstraint::Range(log2) => {
-                                todo!()
                             }
                             // Maybe this could be supported in this future...
                             OperandConstraint::Stack => panic!(
