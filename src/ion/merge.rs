@@ -283,16 +283,29 @@ impl<'a, F: Function> Env<'a, F> {
             let mut fixed = false;
             let mut fixed_def = false;
             let mut stack = false;
+            let mut limit: Option<usize> = None;
             for entry in &self.bundles[bundle].ranges {
                 for u in &self.ranges[entry.index].uses {
-                    if let OperandConstraint::FixedReg(_) = u.operand.constraint() {
-                        fixed = true;
-                        if u.operand.kind() == OperandKind::Def {
-                            fixed_def = true;
+                    match u.operand.constraint() {
+                        OperandConstraint::FixedReg(_) => {
+                            fixed = true;
+                            if u.operand.kind() == OperandKind::Def {
+                                fixed_def = true;
+                            }
                         }
-                    }
-                    if let OperandConstraint::Stack = u.operand.constraint() {
-                        stack = true;
+                        OperandConstraint::Stack => stack = true,
+                        OperandConstraint::Range(log2) => {
+                            let current = 1 << log2;
+                            match limit {
+                                Some(prev) => limit = Some(prev.min(current)),
+                                None => limit = Some(current),
+                            }
+                        }
+                        OperandConstraint::Any
+                        | OperandConstraint::Reg
+                        | OperandConstraint::Reuse(_) => {
+                            continue;
+                        }
                     }
                     if fixed && stack && fixed_def {
                         break;
@@ -308,6 +321,7 @@ impl<'a, F: Function> Env<'a, F> {
             if stack {
                 self.bundles[bundle].set_cached_stack();
             }
+            self.bundles[bundle].limit = limit;
 
             // Create a spillslot for this bundle.
             let reg = self.vreg(vreg);
