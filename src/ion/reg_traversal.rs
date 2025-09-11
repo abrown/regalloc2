@@ -119,7 +119,7 @@ impl<'a> core::iter::Iterator for RegTraversalIter<'a> {
 
         while !self.preferred.done() {
             let reg = self.preferred.advance();
-            if Some(reg) == self.hint || reg.hw_enc() > self.limit.unwrap_or(usize::MAX) {
+            if Some(reg) == self.hint || reg.hw_enc() >= self.limit.unwrap_or(usize::MAX) {
                 continue; // Try again; we already tried the hint or we are outside of the register range limit.
             }
             return Some(reg);
@@ -127,7 +127,7 @@ impl<'a> core::iter::Iterator for RegTraversalIter<'a> {
 
         while !self.non_preferred.done() {
             let reg = self.non_preferred.advance();
-            if Some(reg) == self.hint || reg.hw_enc() > self.limit.unwrap_or(usize::MAX) {
+            if Some(reg) == self.hint || reg.hw_enc() >= self.limit.unwrap_or(usize::MAX) {
                 continue; // Try again; we already tried the hint or we are outside of the register range limit.
             }
             return Some(reg);
