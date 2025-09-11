@@ -32,9 +32,9 @@ impl<'a> RegTraversalIter<'a> {
     pub fn new(
         env: &'a MachineEnv,
         class: RegClass,
+        fixed: Option<PReg>,
         hint: PReg,
         offset: usize,
-        fixed: Option<PReg>,
     ) -> Self {
         let hint = if hint != PReg::invalid() {
             Some(hint)
