@@ -83,9 +83,7 @@ impl<'a> core::iter::Iterator for RegTraversalIter<'a> {
 
     fn next(&mut self) -> Option<PReg> {
         if self.is_fixed {
-            let ret = self.fixed;
-            self.fixed = None;
-            return ret;
+            return self.fixed.take();
         }
 
         fn wrap(idx: usize, limit: usize) -> usize {
