@@ -929,6 +929,8 @@ impl Operand {
             OperandConstraint::FixedReg(PReg::new(constraint_field & 0b0111111, self.class()))
         } else if constraint_field & 0b0100000 != 0 {
             OperandConstraint::Reuse(constraint_field & 0b0011111)
+        } else if constraint_field & 0b0010000 != 0 {
+            OperandConstraint::Range(constraint_field & 0b0001111)
         } else {
             match constraint_field {
                 0 => OperandConstraint::Any,
