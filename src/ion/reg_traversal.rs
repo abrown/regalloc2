@@ -114,7 +114,9 @@ impl<'a> core::iter::Iterator for RegTraversalIter<'a> {
 
         if self.use_hint {
             self.use_hint = false;
-            return self.hint;
+            if self.hint.unwrap().hw_enc() < self.limit.unwrap_or(usize::MAX) {
+                return self.hint;
+            }
         }
 
         while !self.preferred.done() {
