@@ -228,7 +228,18 @@ impl Arbitrary<'_> for RegClass {
 
 impl Arbitrary<'_> for OperandConstraint {
     fn arbitrary(u: &mut Unstructured) -> ArbitraryResult<Self> {
-        Ok(*u.choose(&[OperandConstraint::Any, OperandConstraint::Reg])?)
+        let constraint = *u.choose(&[
+            OperandConstraint::Any,
+            OperandConstraint::Reg,
+            OperandConstraint::Range(usize::MAX),
+        ])?;
+        match constraint {
+            // If we pick a range constraint, pick a real range; we expect to
+            // access up to 32 registers (see `machine_env` below) and record
+            // the log2 representation of the upper limit (e.g., log2 32 = 5).
+            OperandConstraint::Range(_) => Ok(OperandConstraint::Range(u.int_in_range(1..=5)?)),
+            _ => Ok(constraint),
+        }
     }
 }
 
