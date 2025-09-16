@@ -1042,7 +1042,7 @@ impl<'a, F: Function> Env<'a, F> {
 
             let fixed_preg = match req {
                 Requirement::FixedReg(preg) | Requirement::FixedStack(preg) => Some(preg),
-                Requirement::Register => None,
+                Requirement::Register | Requirement::Range(..) => None,
                 Requirement::Stack => {
                     // If we must be on the stack, mark our spillset
                     // as required immediately.
