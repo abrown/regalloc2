@@ -16,6 +16,7 @@ use super::{Env, LiveBundleIndex, SpillSet, SpillSlotIndex, VRegIndex};
 use crate::{
     ion::{
         data_structures::{BlockparamOut, CodeRange},
+        requirement::Requirement,
         LiveRangeList,
     },
     Function, Inst, OperandConstraint, OperandKind, PReg, ProgPoint,
@@ -112,18 +113,13 @@ impl<'a, F: Function> Env<'a, F> {
         }
 
         // Check for a requirements conflict.
-        if self.bundles[from].cached_stack()
-            || self.bundles[from].cached_fixed()
-            || self.bundles[to].cached_stack()
-            || self.bundles[to].cached_fixed()
-        {
-            if self.merge_bundle_requirements(from, to).is_err() {
-                trace!(" -> conflicting requirements; aborting merge");
-                return false;
-            }
-        }
-
-        trace!(" -> committing to merge");
+        let req = if let Ok(req) = self.merge_bundle_requirements(from, to) {
+            trace!(" -> committing to merge with requirement: {req:?}");
+            req
+        } else {
+            trace!(" -> conflicting requirements; aborting merge");
+            return false;
+        };
 
         // If we reach here, then the bundles do not overlap -- merge
         // them!  We do this with a merge-sort-like scan over both
@@ -166,6 +162,9 @@ impl<'a, F: Function> Env<'a, F> {
             }
             if self.bundles[from].cached_fixed_def() {
                 self.bundles[to].set_cached_fixed_def();
+            }
+            if let Requirement::Range(limit) = req {
+                self.bundles[to].limit = Some(limit as usize);
             }
 
             return true;
@@ -251,6 +250,9 @@ impl<'a, F: Function> Env<'a, F> {
         }
         if self.bundles[from].cached_fixed_def() {
             self.bundles[to].set_cached_fixed_def();
+        }
+        if let Requirement::Range(limit) = req {
+            self.bundles[to].limit = Some(limit as usize);
         }
 
         true
