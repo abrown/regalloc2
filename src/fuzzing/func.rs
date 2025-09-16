@@ -4,8 +4,8 @@
  */
 
 use crate::{
-    domtree, postorder, Allocation, Block, Function, Inst, InstRange, MachineEnv, Operand,
-    OperandConstraint, OperandKind, OperandPos, PReg, PRegSet, RegClass, VReg,
+    domtree, postorder, Allocation, Block, Function, FxHashSet, Inst, InstRange, MachineEnv,
+    Operand, OperandConstraint, OperandKind, OperandPos, PReg, PRegSet, RegClass, VReg,
 };
 
 use alloc::vec::Vec;
@@ -469,10 +469,22 @@ impl Func {
                 } else if opts.fixed_regs && bool::arbitrary(u)? {
                     let mut fixed_early = vec![];
                     let mut fixed_late = vec![];
+                    let range_limited: FxHashSet<_> = operands
+                        .iter()
+                        .filter(|o| matches!(o.constraint(), OperandConstraint::Range(_)))
+                        .map(|o| o.vreg())
+                        .collect();
+
                     for _ in 0..u.int_in_range(0..=operands.len() - 1)? {
                         // Pick an operand and make it a fixed reg.
                         let i = u.int_in_range(0..=(operands.len() - 1))?;
                         let op = operands[i];
+                        // Do not allow range-limited vregs to be used with a
+                        // fixed constraint: there is no mechanism for resolving
+                        // these conflicts within the same instruction.
+                        if range_limited.contains(&op.vreg()) {
+                            continue;
+                        }
                         let fixed_reg = PReg::new(u.int_in_range(0..=62)?, op.class());
                         if op.kind() == OperandKind::Def && op.pos() == OperandPos::Early {
                             // Early-defs with fixed constraints conflict with
