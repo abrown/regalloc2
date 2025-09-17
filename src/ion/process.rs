@@ -1211,7 +1211,7 @@ impl<'a, F: Function> Env<'a, F> {
                     || lowest_cost_evict_conflict_cost.is_none()
                     || lowest_cost_evict_conflict_cost.unwrap() >= our_spill_weight)
             {
-                if let Requirement::Register = req {
+                if matches!(req, Requirement::Register | Requirement::Range(_)) {
                     // Check if this is a too-many-live-registers situation.
                     let range = self.ctx.bundles[bundle].ranges[0].range;
                     trace!("checking for too many live regs");
@@ -1251,6 +1251,15 @@ impl<'a, F: Function> Env<'a, F> {
                                 fixed_assigned += 1;
                             }
                         }
+
+                        // We also need to discard any registers that do not fit
+                        // the range--we cannot allocate to them.
+                        if let Requirement::Range(limit) = req {
+                            if preg.hw_enc() >= limit as usize {
+                                continue;
+                            }
+                        }
+
                         total_regs += 1;
                     }
                     trace!(
