@@ -569,6 +569,9 @@ impl Func {
                                     (OperandKind::Def, OperandConstraint::FixedReg(fixed)) => {
                                         fixed == preg
                                     }
+                                    (_, OperandConstraint::Range(log2)) => {
+                                        preg.hw_enc() < (1 << log2) as usize
+                                    }
                                     _ => false,
                                 })
                             {
