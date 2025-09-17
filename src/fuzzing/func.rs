@@ -226,18 +226,30 @@ impl Arbitrary<'_> for RegClass {
     }
 }
 
-impl Arbitrary<'_> for OperandConstraint {
-    fn arbitrary(u: &mut Unstructured) -> ArbitraryResult<Self> {
+impl OperandConstraint {
+    /// Generate an arbitrary operand constraint, taking into account the number
+    /// of operands in the instruction when calculating the `Range` constraint.
+    fn arbitrary_with_num_operands(
+        u: &mut Unstructured,
+        num_operands: usize,
+    ) -> ArbitraryResult<Self> {
         let constraint = *u.choose(&[
             OperandConstraint::Any,
             OperandConstraint::Reg,
             OperandConstraint::Range(usize::MAX),
         ])?;
         match constraint {
-            // If we pick a range constraint, pick a real range; we expect to
-            // access up to 32 registers (see `machine_env` below) and record
-            // the log2 representation of the upper limit (e.g., log2 32 = 5).
-            OperandConstraint::Range(_) => Ok(OperandConstraint::Range(u.int_in_range(1..=5)?)),
+            // If we pick the range constraint, use a real range. Note that (a)
+            // we expect to access up to 32 registers (see `machine_env` below)
+            // and (b) this constraint holds the log2 representation of the
+            // upper limit. To avoid creating functions that are too constrained
+            // and thus non-allocatable (a real risk with this constraint), we
+            // either pick a limit above the current number of operands or 8,
+            // whichever is higher.
+            OperandConstraint::Range(_) => {
+                let limit = (num_operands.ilog2() << 1).max(3);
+                Ok(OperandConstraint::Range(limit as usize))
+            }
             _ => Ok(constraint),
         }
     }
@@ -413,7 +425,7 @@ impl Func {
             let mut avail = block_params[block].clone();
             let mut remaining_nonlocal_uses = u.int_in_range(0..=3)?;
             while let Some(vreg) = vregs_by_block_to_be_defined[block].pop() {
-                let def_constraint = OperandConstraint::arbitrary(u)?;
+                let def_constraint = OperandConstraint::arbitrary_with_num_operands(u, 1)?;
                 let def_pos = if bool::arbitrary(u)? {
                     OperandPos::Early
                 } else {
@@ -446,7 +458,8 @@ impl Func {
                         remaining_nonlocal_uses -= 1;
                         *u.choose(&vregs_by_block[def_block.index()])?
                     };
-                    let use_constraint = OperandConstraint::arbitrary(u)?;
+                    let use_constraint =
+                        OperandConstraint::arbitrary_with_num_operands(u, operands.len() + 1)?;
                     operands.push(Operand::new(
                         vreg,
                         use_constraint,
