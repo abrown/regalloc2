@@ -13,6 +13,7 @@ const OPTIONS: func::Options = func::Options {
     clobbers: true,
     reftypes: true,
     callsite_ish_constraints: true,
+    limit_constraints: true,
     ..func::Options::DEFAULT
 };
 

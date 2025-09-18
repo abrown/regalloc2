@@ -4,8 +4,8 @@
  */
 
 use crate::{
-    domtree, postorder, Allocation, Block, Function, Inst, InstRange, MachineEnv, Operand,
-    OperandConstraint, OperandKind, OperandPos, PReg, PRegSet, RegClass, VReg,
+    domtree, postorder, Allocation, Block, Function, FxHashSet, Inst, InstRange, MachineEnv,
+    Operand, OperandConstraint, OperandKind, OperandPos, PReg, PRegSet, RegClass, VReg,
 };
 
 use alloc::vec::Vec;
@@ -260,6 +260,41 @@ impl Arbitrary<'_> for OperandConstraint {
     }
 }
 
+impl OperandConstraint {
+    /// Generate an arbitrary operand constraint, taking into account the number
+    /// of operands in the instruction when calculating the `Limit` constraint.
+    fn arbitrary_with_num_operands(
+        u: &mut Unstructured,
+        allow_limits: bool,
+        num_operands: usize,
+    ) -> ArbitraryResult<Self> {
+        let constraint = *u.choose(&[
+            OperandConstraint::Any,
+            OperandConstraint::Reg,
+            OperandConstraint::Limit(usize::MAX),
+        ])?;
+        match constraint {
+            OperandConstraint::Limit(_) => {
+                if allow_limits {
+                    // If we pick the limit constraint and limits are allowed,
+                    // generate a real limit. Note that we expect to access up
+                    // to 32 registers (see `machine_env` below). To avoid
+                    // creating functions that are too constrained and thus
+                    // non-allocatable (a real risk with this constraint), we
+                    // either pick a limit above the current number of operands
+                    // or 8, whichever is higher.
+                    let limit = num_operands.next_power_of_two().max(8);
+                    Ok(OperandConstraint::Limit(limit))
+                } else {
+                    // If limits are not allowed, just default to `Reg`.
+                    Ok(OperandConstraint::Reg)
+                }
+            }
+            _ => Ok(constraint),
+        }
+    }
+}
+
 fn choose_dominating_block(
     idom: &[Block],
     mut block: Block,
@@ -313,10 +348,19 @@ fn convert_def_to_reuse(u: &mut Unstructured<'_>, operands: &mut [Operand]) -> A
 fn convert_op_to_fixed(
     u: &mut Unstructured<'_>,
     op: &mut Operand,
+    limited: &FxHashSet<VReg>,
     fixed_early: &mut Vec<PReg>,
     fixed_late: &mut Vec<PReg>,
 ) -> ArbitraryResult<()> {
     let fixed_reg = PReg::new(u.int_in_range(0..=62)?, op.class());
+
+    // Do not allow vregs with limit constraints to be used
+    // with a fixed constraint: there is no mechanism for
+    // resolving these conflicts within the same
+    // instruction.
+    if limited.contains(&op.vreg()) {
+        return Ok(());
+    }
 
     if op.kind() == OperandKind::Def && op.pos() == OperandPos::Early {
         // Early-defs with fixed constraints conflict with
@@ -354,9 +398,13 @@ fn convert_op_to_fixed(
     Ok(())
 }
 
-fn has_fixed_def_with(preg: PReg) -> impl Fn(&Operand) -> bool {
+/// Determine if `preg` should be avoided as a clobber; if we clobber operands
+/// with certain constraints (e.g., fixed, limits) we may end up with an
+/// unallocatable test case.
+fn should_avoid_clobber(preg: PReg) -> impl Fn(&Operand) -> bool {
     move |op| match (op.kind(), op.constraint()) {
         (OperandKind::Def, OperandConstraint::FixedReg(fixed)) => fixed == preg,
+        (_, OperandConstraint::Limit(max)) => preg.hw_enc() < max,
         _ => false,
     }
 }
@@ -369,6 +417,7 @@ pub struct Options {
     pub clobbers: bool,
     pub reftypes: bool,
     pub callsite_ish_constraints: bool,
+    pub limit_constraints: bool,
     pub num_blocks: RangeInclusive<usize>,
     pub num_vregs_per_block: RangeInclusive<usize>,
     pub num_uses_per_inst: RangeInclusive<usize>,
@@ -385,6 +434,7 @@ impl Options {
         clobbers: false,
         reftypes: false,
         callsite_ish_constraints: false,
+        limit_constraints: false,
         num_blocks: 1..=100,
         num_vregs_per_block: 5..=15,
         num_uses_per_inst: 0..=10,
@@ -494,7 +544,7 @@ impl Func {
                 // Start with a written-to vreg (`def`).
                 let mut operands = vec![Operand::new(
                     vreg,
-                    OperandConstraint::arbitrary(u)?,
+                    OperandConstraint::arbitrary_with_num_operands(u, opts.limit_constraints, 1)?,
                     OperandKind::Def,
                     OperandPos::arbitrary(u)?,
                 )];
@@ -523,7 +573,11 @@ impl Func {
                     };
                     operands.push(Operand::new(
                         vreg,
-                        OperandConstraint::arbitrary(u)?,
+                        OperandConstraint::arbitrary_with_num_operands(
+                            u,
+                            opts.limit_constraints,
+                            operands.len() + 1,
+                        )?,
                         OperandKind::Use,
                         OperandPos::Early,
                     ));
@@ -538,11 +592,17 @@ impl Func {
                 } else if opts.fixed_regs && bool::arbitrary(u)? {
                     let mut fixed_early = vec![];
                     let mut fixed_late = vec![];
+                    let limited: FxHashSet<_> = operands
+                        .iter()
+                        .filter(|o| matches!(o.constraint(), OperandConstraint::Limit(_)))
+                        .map(|o| o.vreg())
+                        .collect();
+
                     for _ in 0..u.int_in_range(0..=operands.len() - 1)? {
                         // Pick an operand and make it a fixed reg.
                         let i = u.int_in_range(0..=(operands.len() - 1))?;
                         let op = &mut operands[i];
-                        convert_op_to_fixed(u, op, &mut fixed_early, &mut fixed_late)?;
+                        convert_op_to_fixed(u, op, &limited, &mut fixed_early, &mut fixed_late)?;
                     }
 
                     if opts.callsite_ish_constraints && bool::arbitrary(u)? {
@@ -561,7 +621,7 @@ impl Func {
                         for _ in 0..u.int_in_range(opts.num_clobbers_per_inst.clone())? {
                             let reg = u.int_in_range(0..=30)?;
                             let preg = PReg::new(reg, RegClass::arbitrary(u)?);
-                            if operands.iter().any(has_fixed_def_with(preg)) {
+                            if operands.iter().any(should_avoid_clobber(preg)) {
                                 continue;
                             }
                             clobbers.push(preg);
