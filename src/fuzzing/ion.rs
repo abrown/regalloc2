@@ -167,7 +167,7 @@ fn oversubscribed_limits() {
     let block0 = builder.add_block();
     // inst0(Def: v0i reg)
     builder.add_inst(block0, inst(&[Operand::reg_def(v0i)]));
-    // inst2(Def: v1i limit(0..=1), Use: v0i limit(0..=1), Use: v0i limit(0..=1), Use: v0i limit(0..=1), Use: v0i limit(0..=3))
+    // inst1(Def: v1i limit(0..=1), Use: v0i limit(0..=1), Use: v0i limit(0..=1), Use: v0i limit(0..=1), Use: v0i limit(0..=3))
     builder.add_inst(
         block0,
         inst(&[
@@ -187,6 +187,64 @@ fn oversubscribed_limits() {
         ]),
     );
     // inst3(ret)
+    builder.add_inst(block0, InstData::ret());
+    builder.compute_doms();
+    let func = builder.finalize();
+    log::trace!("{func:?}");
+
+    let env = func::machine_env();
+    let mut ctx = Ctx::default();
+    ion::run(&func, &env, &mut ctx, false, false).expect("regalloc failed");
+}
+
+/// This test checks that a limit-constrained register can be moved to a fixed
+/// register.
+#[test]
+fn move_limited_to_fixed() {
+    use crate::fuzzing::func::{InstData, InstOpcode};
+    use crate::ion::Ctx;
+    use crate::{Operand, PReg, RegClass};
+    use alloc::vec;
+
+    fn inst(operands: &[Operand]) -> InstData {
+        InstData {
+            op: InstOpcode::Op,
+            operands: operands.to_vec(),
+            clobbers: vec![],
+        }
+    }
+
+    let _ = env_logger::try_init();
+
+    let mut builder = func::FuncBuilder::new();
+    let v0i = builder.add_vreg(RegClass::Int);
+    let v1i = builder.add_vreg(RegClass::Int);
+    let v2i = builder.add_vreg(RegClass::Int);
+    let p35i = PReg::new(35, RegClass::Int);
+    let block0 = builder.add_block();
+    // inst0(Def: v0i reg)
+    builder.add_inst(block0, inst(&[Operand::reg_def(v0i)]));
+    // inst1(Def: v1i limit(0..=1), Def: v2i limit(0..=1))
+    builder.add_inst(
+        block0,
+        inst(&[
+            Operand::reg_limited_def(v1i, 2),
+            Operand::reg_limited_def(v2i, 2),
+        ]),
+    );
+    // inst2(Use: v0i limit(0..=1))
+    builder.add_inst(block0, inst(&[Operand::reg_limited_use(v0i, 2)]));
+    // inst3(Use: v0i fixed(p35i))
+    builder.add_inst(block0, inst(&[Operand::reg_fixed_use(v0i, p35i)]));
+    // inst4(Use: v1i limit(0..=1), Use: v2i limit(0..=1)
+    builder.add_inst(
+        block0,
+        inst(&[
+            Operand::reg_limited_use(v1i, 2),
+            Operand::reg_limited_use(v2i, 2),
+        ]),
+    );
+    // inst5(ret)
     builder.add_inst(block0, InstData::ret());
     builder.compute_doms();
     let func = builder.finalize();
