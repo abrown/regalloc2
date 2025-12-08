@@ -806,6 +806,23 @@ impl Operand {
         )
     }
 
+    /// Create an `Operand` that uses a virtual register and ensures that it is
+    /// placed within the physical range `0..max`, where `max` is excluded.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max` is not a power of two.
+    #[inline(always)]
+    pub fn reg_limited_use(vreg: VReg, max: usize) -> Self {
+        assert!(max.is_power_of_two());
+        Operand::new(
+            vreg,
+            OperandConstraint::Limit(max),
+            OperandKind::Use,
+            OperandPos::Early,
+        )
+    }
+
     /// Create an `Operand` that designates a def of a vreg and
     /// ensures that it is placed in the given, fixed PReg at the
     /// def. It is guaranteed that the `Allocation` resulting for this

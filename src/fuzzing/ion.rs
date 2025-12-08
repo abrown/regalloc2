@@ -84,29 +84,58 @@ fn smoke() {
     .budget_ms(1_000);
 }
 
+/// This test demonstrates that moves between fixed registers and limited
+/// registers work as expected. Even though `v0i` is constrained to `p35i`
+/// __AND__ the fully-subscribed range `0..=1`, the proper copies are inserted
+/// and the test case allocates.
 #[test]
 fn limits_vs_fixed_regs() {
     use crate::fuzzing::func::{InstData, InstOpcode};
     use crate::ion::Ctx;
-    use crate::{Operand, PReg, RegClass, VReg};
+    use crate::{Operand, PReg, RegClass};
     use alloc::vec;
+
+    fn inst(operands: &[Operand]) -> InstData {
+        InstData {
+            op: InstOpcode::Op,
+            operands: operands.to_vec(),
+            clobbers: vec![],
+        }
+    }
+
+    let _ = env_logger::try_init();
 
     let mut builder = func::FuncBuilder::new();
     let v0i = builder.add_vreg(RegClass::Int);
+    let v1i = builder.add_vreg(RegClass::Int);
+    let v2i = builder.add_vreg(RegClass::Int);
     let p35i = PReg::new(35, RegClass::Int);
     let block0 = builder.add_block();
+    // inst0(Def: v0i reg, Def: v1i reg, Def: v2i reg)
     builder.add_inst(
         block0,
-        InstData {
-            op: InstOpcode::Op,
-            operands: vec![Operand::reg_def(v0i)],
-            clobbers: vec![],
-        },
+        inst(&[
+            Operand::reg_def(v0i),
+            Operand::reg_def(v1i),
+            Operand::reg_def(v2i),
+        ]),
     );
+    // inst1(Use: v0i fixed(p35i))
+    builder.add_inst(block0, inst(&[Operand::reg_fixed_use(v0i, p35i)]));
+    // inst2(Use: v0i limit(0..=1), Use: v1i limit(0..=1), Use: v2i)
+    builder.add_inst(
+        block0,
+        inst(&[
+            Operand::reg_limited_use(v0i, 2),
+            Operand::reg_limited_use(v1i, 2),
+            Operand::reg_use(v2i),
+        ]),
+    );
+    // inst3(ret)
     builder.add_inst(block0, InstData::ret());
     builder.compute_doms();
     let func = builder.finalize();
-    println!("func: {func:#?}");
+    log::trace!("{func:?}");
 
     let env = func::machine_env();
     let mut ctx = Ctx::default();

@@ -32,6 +32,9 @@ bumpalo = { version = "3.16.0", features = ["allocator-api2"] }
 allocator-api2 = { version = "0.2.18", default-features = false, features = ["alloc"] }
 bincode = { version = "1.3.3", optional = true }
 
+[dev-dependencies]
+env_logger = "0.8.3"
+
 # When testing regalloc2 by itself, enable debug assertions and overflow checks.
 [profile.release]
 debug = true
