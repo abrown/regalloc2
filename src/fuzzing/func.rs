@@ -24,9 +24,9 @@ pub enum InstOpcode {
 
 #[derive(Clone, Debug)]
 pub struct InstData {
-    op: InstOpcode,
-    operands: Vec<Operand>,
-    clobbers: Vec<PReg>,
+    pub op: InstOpcode,
+    pub operands: Vec<Operand>,
+    pub clobbers: Vec<PReg>,
 }
 
 impl InstData {
@@ -131,7 +131,7 @@ impl Function for Func {
     }
 }
 
-struct FuncBuilder {
+pub(crate) struct FuncBuilder {
     postorder: Vec<Block>,
     idom: Vec<Block>,
     f: Func,
@@ -139,7 +139,7 @@ struct FuncBuilder {
 }
 
 impl FuncBuilder {
-    fn new() -> Self {
+    pub fn new() -> Self {
         FuncBuilder {
             postorder: vec![],
             idom: vec![],
@@ -171,6 +171,11 @@ impl FuncBuilder {
         b
     }
 
+    pub fn add_vreg(&mut self, class: RegClass) -> VReg {
+        self.f.num_vregs += 1;
+        VReg::new(self.f.num_vregs - 1, class)
+    }
+
     pub fn add_inst(&mut self, block: Block, data: InstData) {
         self.insts_per_block[block.index()].push(data);
     }
@@ -188,7 +193,7 @@ impl FuncBuilder {
         self.f.block_params_out[block.index()] = params;
     }
 
-    fn compute_doms(&mut self) {
+    pub fn compute_doms(&mut self) {
         let f = &self.f;
         let _ = postorder::calculate(
             self.f.blocks.len(),
@@ -228,7 +233,7 @@ impl FuncBuilder {
         })
     }
 
-    fn finalize(mut self) -> Func {
+    pub fn finalize(mut self) -> Func {
         for (blocknum, blockrange) in self.f.blocks.iter_mut().enumerate() {
             let begin_inst = self.f.insts.len();
             for inst in &self.insts_per_block[blocknum] {
@@ -498,9 +503,7 @@ impl Func {
         builder.compute_doms();
 
         let alloc_vreg = |builder: &mut FuncBuilder, u: &mut Unstructured| {
-            let vreg = VReg::new(builder.f.num_vregs, RegClass::arbitrary(u)?);
-            builder.f.num_vregs += 1;
-            Ok(vreg)
+            Ok(builder.add_vreg(RegClass::arbitrary(u)?))
         };
 
         let mut vregs_by_block = vec![];

@@ -83,3 +83,32 @@ fn smoke() {
     })
     .budget_ms(1_000);
 }
+
+#[test]
+fn limits_vs_fixed_regs() {
+    use crate::fuzzing::func::{InstData, InstOpcode};
+    use crate::ion::Ctx;
+    use crate::{Operand, PReg, RegClass, VReg};
+    use alloc::vec;
+
+    let mut builder = func::FuncBuilder::new();
+    let v0i = builder.add_vreg(RegClass::Int);
+    let p35i = PReg::new(35, RegClass::Int);
+    let block0 = builder.add_block();
+    builder.add_inst(
+        block0,
+        InstData {
+            op: InstOpcode::Op,
+            operands: vec![Operand::reg_def(v0i)],
+            clobbers: vec![],
+        },
+    );
+    builder.add_inst(block0, InstData::ret());
+    builder.compute_doms();
+    let func = builder.finalize();
+    println!("func: {func:#?}");
+
+    let env = func::machine_env();
+    let mut ctx = Ctx::default();
+    ion::run(&func, &env, &mut ctx, false, false).expect("regalloc failed");
+}
