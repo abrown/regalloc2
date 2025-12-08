@@ -1,5 +1,6 @@
 //! Fuzz the `ion` register allocator.
 
+use crate::serialize::SerializableFunction;
 use crate::{checker, fuzzing::func, ion};
 use arbitrary::{Arbitrary, Result, Unstructured};
 use core::cell::RefCell;
@@ -60,8 +61,12 @@ pub fn check(t: TestCase) {
     }
 
     CTX.with(|ctx| {
-        ion::run(func, &env, &mut *ctx.borrow_mut(), *annotate, *check_ssa)
-            .expect("regalloc did not succeed");
+        if let Err(e) = ion::run(func, &env, &mut *ctx.borrow_mut(), *annotate, *check_ssa) {
+            let serializable = SerializableFunction::new(func, env.clone());
+            let bytes = bincode::serialize(&serializable).expect("could not serialize function");
+            std::fs::write("fuzz-input.bin", &bytes).expect("unable to write to file");
+            panic!("regalloc failed: {}", e);
+        }
 
         let mut checker = checker::Checker::new(func, &env);
         checker.prepare(&ctx.borrow().output);

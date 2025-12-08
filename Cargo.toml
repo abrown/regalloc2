@@ -30,6 +30,7 @@ arbitrary = { version = "1.4.2", optional = true }
 arbtest = { version = "0.3.2", optional = true }
 bumpalo = { version = "3.16.0", features = ["allocator-api2"] }
 allocator-api2 = { version = "0.2.18", default-features = false, features = ["alloc"] }
+bincode = { version = "1.3.3", optional = true }
 
 # When testing regalloc2 by itself, enable debug assertions and overflow checks.
 [profile.release]
@@ -50,7 +51,7 @@ checker = []
 trace-log = []
 
 # Exposes the internal API for fuzzing.
-fuzzing = ["arbitrary", "arbtest", "checker", "trace-log"]
+fuzzing = ["arbitrary", "arbtest", "checker", "trace-log", "bincode", "enable-serde"]
 
 # Enables serde for exposed types.
 enable-serde = ["serde"]
