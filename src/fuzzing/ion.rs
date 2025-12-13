@@ -305,6 +305,7 @@ fn multi_use() {
     ion::run(&func, &env, &mut ctx, false, false).expect("regalloc failed");
 }
 
+/// Rahul's fuzz test case.
 #[test]
 fn complex_constraints() {
     use crate::fuzzing::func::{InstData, InstOpcode};
@@ -452,6 +453,8 @@ fn complex_constraints() {
     ion::run(&func, &env, &mut ctx, false, false).expect("regalloc failed");
 }
 
+/// This is a minimization of `complex_constraints` that continues to fail with
+/// `TooManyLiveRegs`.
 #[test]
 fn complex_constraints_minimized() {
     use crate::fuzzing::func::{InstData, InstOpcode};
