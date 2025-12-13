@@ -46,6 +46,7 @@ pub fn spill_weight_from_constraint(
     let constraint_bonus: f32 = match constraint {
         OperandConstraint::Any => 1000.0,
         OperandConstraint::Reg | OperandConstraint::FixedReg(_) => 2000.0,
+        // OperandConstraint::Limit(max) => 1000.0 * (16 - max.ilog2()) as f32,
         _ => 0.0,
     };
     SpillWeight(hot_bonus + def_bonus + constraint_bonus)
